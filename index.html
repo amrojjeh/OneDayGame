@@ -1,4 +1,3 @@
-<!-- Will github pick this up as the index file? -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -53,6 +52,7 @@
 				ctx.fillRect(this.x, this.y, Stair.width, Stair.height);
 				ctx.fillStyle = `rgba(255, ${193 * this.unredness}, ${20 * this.unredness}, ${this.doorOpacity})`;
 				ctx.fillRect(this.x, this.y - Stair.doorHeight, Stair.doorWidth, Stair.doorHeight);
+				ctx.fillRect(this.x + Stair.width - Stair.doorWidth, this.y - Stair.doorHeight, Stair.doorWidth, Stair.doorHeight);
 			};
 
 			this.fadeTo = function (opacity) {
