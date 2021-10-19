@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Stairs, the game</title>
+	<style>
+		* {
+			width: 100vw;
+			height: 100vh;
+			padding: 0;
+			margin: 0;
+			box-sizing: border-box;
+		}
+	</style>
+</head>
+<body>
+	<canvas id="game"></canvas>
+	<script>
+		let canvas = document.getElementById("game");
+		let width = canvas.width = document.body.clientWidth;
+		let height = canvas.height = document.body.clientHeight;
+		let ctx = canvas.getContext("2d");
+		let gameOver = false;
+		const lerp = (x, y, a) => x + (y - x) * a;
+
+		/* Basically a linkedlist, so it can store the entire level. */
+		function Stair(xpos, ypos) {
+			Stair.height = 10;
+			Stair.width = 50;
+			Stair.doorHeight = Stair.height * 2;
+			Stair.doorWidth = Stair.width / 10;
+
+			/* First element in the doubly linked list */
+			if (!Stair.firstStair) {
+				Stair.firstStair = this;
+			}
+
+			if (!Stair.lastStair) {
+				Stair.lastStair = this;
+			}
+
+			this.x = xpos;
+			this.y = ypos;
+			this.targetOpacity = 0;
+			this.targetUnredness = 1;
+			this.unredness = 1;
+			this.opacity = 0;
+			this.door = false;
+			this.doorOpacity = 0;
+			this.draw = function(ctx) {
+				ctx.fillStyle = `rgba(255, ${193 * this.unredness}, ${20 * this.unredness}, ${this.opacity})`;
+				ctx.fillRect(this.x, this.y, Stair.width, Stair.height);
+				ctx.fillStyle = `rgba(255, ${193 * this.unredness}, ${20 * this.unredness}, ${this.doorOpacity})`;
+				ctx.fillRect(this.x, this.y - Stair.doorHeight, Stair.doorWidth, Stair.doorHeight);
+			};
+
+			this.fadeTo = function (opacity) {
+				this.targetOpacity = opacity;
+			}
+
+			this.unred = function (degree) {
+				this.targetUnredness = degree;
+			}
+
+			this.moveAmount = function (distancex, distancey) {
+				this.x += distancex;
+				this.y += distancey;
+				Lava.lava.height -= distancey;
+			}
+
+			this.update = function (delta) {
+				if (this.y > height) {
+					Stair.firstStair = this.next;
+					return;
+				}
+				this.opacity = lerp(this.opacity, this.targetOpacity, .1);
+				this.unredness = lerp(this.unredness, this.targetUnredness, .1);
+				if (!this.door)
+					this.doorOpacity = Math.min(this.opacity, lerp(this.doorOpacity, 0, .1));
+				else
+					this.doorOpacity = Math.min(this.opacity, 1);
+			}
+
+			/* The next stair */
+			this.next = undefined;
+			this.back = undefined;
+
+			/* Generates the next stair */
+			this.generateNext = function(paddingx, paddingy) {
+				paddingx = 2;
+				paddingy = Player.height + Stair.height / 2;
+				let r = Math.round(Math.random());
+				if (r == 1) {
+					// Generate right stair
+					this.next = new Stair(this.x + Stair.width + paddingx, this.y - paddingy);
+				} else {
+					// Generate left stair
+					this.next = new Stair(this.x - paddingx - Stair.width, this.y - paddingy);
+				}
+				this.next.back = this;
+				this.next.door = Math.random() > 0.95;
+				Stair.lastStair = this.next;
+				return this.next;
+			}
+		}
+
+		function Lava() {
+			Lava.lava = this;
+			this.height = 50;
+			this.speed = undefined;
+			this.width = width;
+
+			this.draw = function(ctx) {
+				ctx.fillStyle = "#FF0000";
+				ctx.fillRect(0, height - this.height, this.width, this.height);
+			}
+
+			this.update = function(delta) {
+				speed = this.speed ? this.speed : Player.player.score * 2;
+				if (this.height <= 0) this.height = 50;
+				this.height += Math.abs(speed * delta);
+				if (this.height >= height) {
+					gameOver = true;
+				}
+			}
+		}
+
+		function Player() {
+			Player.width = 10;
+			Player.height = 20;
+
+			Player.player = this;
+
+			this.dismantleDoor = function() {
+				if (this.currentStair.door) {
+					this.score += 1;
+					this.currentStair.door = false;
+				}
+				else {
+					this.die(0);
+				}
+			}
+
+			/* Character jumps
+			'right' is a boolean to indiciate if he's jumping to the right
+			Otherwise he's jumping to the left */
+			this.jump = function(right) {
+				if (this.vy != 0)
+					return;
+				if (this.inverted)
+					right = !right;
+				function imGonnaMakeIt() {
+					if (Player.player.currentStair.door) return false;
+					if (Player.player.x < Player.player.currentStair.next.x && right) return true;
+					if (Player.player.x > Player.player.currentStair.next.x && !right) return true;
+					return false;
+				}
+				Stair.lastStair.generateNext();
+
+				if (imGonnaMakeIt()) {
+					this.currentStair.fadeTo(0);
+					this.score += 1;
+					this.currentStair = this.currentStair.next;
+					centerLevel();
+				}
+				else {
+					this.die(100 * (right ? 1 : -1));
+				}
+			}
+
+			this.die = function(vx) {
+				this.currentStair.unred(0);
+				this.vy = -130;
+				this.ay = 400;
+				this.vx = vx;
+				Lava.lava.speed = 400;
+			}
+
+			this.update = function(delta) {
+				if (Lava.lava && Lava.lava.height > this.y) {
+					this.die();
+					return;
+				}
+				this.y += this.vy * delta;
+				this.x += this.vx * delta;
+				this.vy += this.ay * delta;
+			}
+
+			this.currentStair = new Stair(width / 2, height / 2);
+			this.currentStair.opacity = 1;
+			this.x = this.currentStair.x + (Stair.width - Player.width) / 2;
+			this.y = this.currentStair.y - Player.height;
+			this.vy = 0; // y-velocity
+			this.vx = 0; // x-velocity
+			this.ay = 0; // downwards acceleration
+			this.score = 0;
+			this.inverted = false;
+
+			this.draw = function(ctx) {
+				ctx.fillStyle = "#32CCFF";
+				ctx.fillRect(this.x, this.y, Player.width, Player.height);
+			};
+		}
+
+		function updateOpacity() {
+			var counter = 0.0;
+			var max = 5.0;
+			for (let current = Player.player.currentStair; current; current = current.next) {
+				current.fadeTo((max - counter) / max);
+				counter++;
+			}
+		}
+
+		function centerLevel() {
+			let distancex =  Player.player.currentStair.back.x - Player.player.currentStair.x;
+			let distancey = Player.player.currentStair.back.y - Player.player.currentStair.y;
+			for (let current = Stair.firstStair; current; current = current.next) {
+				current.moveAmount(distancex, distancey);
+			}
+			tutorial.displacement += distancey;
+		}
+
+		/* TODO: Before the first jump, show controls. After the first jump, hide controls, and render the rest of the level */
+		function startLevel() {
+			clear();
+			gameOver = false;
+			Stair.firstStair = null;
+			Stair.lastStair = null;
+			let player = new Player();
+			let lava = new Lava();
+			var latestStair = player.currentStair.generateNext();
+			latestStair.door = true; // This is so that the player can get used to doors early on
+			while (latestStair.x > 0 && latestStair.x < width && latestStair.y > 0) {
+				latestStair = latestStair.generateNext();
+			}
+			window.requestAnimationFrame(step);
+		}
+
+		function tutorial() {
+			if (!tutorial.displacement)
+				tutorial.displacement = 0;
+			if (tutorial.displacement >= height / 2)
+				return;
+			ctx.fillStyle = `rgba(255, 255, 255, ${(height / 2 - tutorial.displacement) / (height / 2)})`;
+			ctx.font = "bold 30px Georgia";
+			ctx.textAlign = "left";
+			ctx.fillText("← to move left", 15, height / 2 + tutorial.displacement);
+			ctx.fillText("→ to move right", 15, height / 2 + 30 + tutorial.displacement);
+			ctx.fillText("SPACE to remove doors", 15, height / 2 + 30 * 2 + tutorial.displacement);
+		}
+
+		function clear() {
+			ctx.fillStyle = "#1F1F1F";
+			ctx.fillRect(0, 0, width, height);
+		}
+
+		function drawScore(ctx) {
+			if (!drawScore.opacity)
+				drawScore.opacity = 0;
+			if (Player.player.score > 0)
+				drawScore.opacity = lerp(drawScore.opacity, 1, .05);
+			ctx.fillStyle = `rgba(255, 255, 255, ${drawScore.opacity})`;
+			ctx.textAlign = "center";
+			ctx.font = "bold 48px Georgia";
+			ctx.fillText(Player.player.score, width / 2, 50);
+		}
+
+		function drawWarnings() {
+			ctx.fillStyle = `rgba(255, 255, 255, 1)`;
+			ctx.textAlign = "center";
+			ctx.font = "bold 48px Georgia";
+			if (Player.player.score < 145) {
+				// Not much to do here
+			} else if (Player.player.score < 150) {
+				ctx.fillText(`INVERTING IN ${150 - Player.player.score}`, width / 2, height / 2- 100);
+			} else if (Player.player.score == 150) {
+				Player.player.inverted = true;
+				ctx.fillText(`CONTROLS INVERTED`, width / 2, height / 2 - 100);
+			} else if (Player.player.score < 195) {
+				// Not much to do here either
+			} else if (Player.player.score < 200) {
+				ctx.fillText(`INVERTING IN ${200 - Player.player.score}`, width / 2, height / 2- 100);
+			} else if (Player.player.score == 200) {
+				Player.player.inverted = false;
+				ctx.fillText(`CONTROLS INVERTED`, width / 2, height / 2 - 100);				
+			}
+		}
+
+		function step(timestamp) {
+			if (!step.previous)
+				step.previous = timestamp;
+			let delta = (timestamp - step.previous) / 1000;
+
+			clear();
+			tutorial();
+			Player.player.update(delta);
+			Player.player.draw(ctx);
+			updateOpacity();
+
+			// Draw all stairs
+			for (var stair = Stair.firstStair; stair; stair = stair.next) {
+				stair.update(delta);
+				stair.draw(ctx);
+			}
+
+			// Draw the score
+			drawScore(ctx);
+
+			// draw lava
+			Lava.lava.update(delta);
+			Lava.lava.draw(ctx);
+
+			drawWarnings();
+
+			step.previous = timestamp;
+			if (!gameOver)
+				window.requestAnimationFrame(step);
+			else
+				endGame();
+		}
+
+		function endGame() {
+			drawScore(ctx);
+			ctx.fillStyle = "rgba(255, 255, 255, 1)";
+			ctx.font = "bold 100px Georgia";
+			ctx.fillText("Game Over.", width / 2, height / 2);
+			ctx.fillText("Press Space to start over.", width / 2, height / 2 + 100);
+		}
+
+		startLevel();
+
+		function handleInput(e) {
+			if (e.repeat) return;
+			switch(e.key) {
+				case "ArrowLeft":
+					Player.player.jump(false);
+					break;
+				case "ArrowRight":
+					Player.player.jump(true);
+					break;
+				case " ":
+				case "Space":
+					if (gameOver)
+						startLevel();
+					else
+						Player.player.dismantleDoor();
+					break;
+				default:
+			}
+		}
+		document.addEventListener('keydown', handleInput, true);
+	</script>
+</body>
+</html>
