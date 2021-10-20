@@ -146,7 +146,7 @@
 			'right' is a boolean to indiciate if he's jumping to the right
 			Otherwise he's jumping to the left */
 			this.jump = function(right) {
-				if (this.vy != 0)
+				if (this.ay != 0)
 					return;
 				if (this.inverted)
 					right = !right;
@@ -170,6 +170,10 @@
 			}
 
 			this.die = function(vx) {
+				if (this.die.died)
+					return;
+				else
+					this.die.died = true;
 				this.currentStair.unred(0);
 				this.vy = -130;
 				this.ay = 400;
